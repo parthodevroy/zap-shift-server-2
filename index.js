@@ -189,7 +189,8 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
     
       const updateDocs={
          $set: {
-          status:status
+          status:status,
+          workStatus:"available"
          }
         }
       const result = await riderCollection.updateOne(query,updateDocs)
@@ -226,9 +227,13 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
     try {
       
       const query ={}
-      const {email}=req.query;
+      const {email,deliveryStatus}=req.query;
       if (email) {
         query.EmailAddress=email
+        
+      }
+      if (deliveryStatus) {
+        query.deliveryStatus=deliveryStatus
         
       }
       const option={sort:{createdAt:-1}}
@@ -347,7 +352,11 @@ app.post('/payment/verify', async (req, res) => {
             // ✔ parcel update
             await ParcelsCollection.updateOne(
                 { _id: new ObjectId(parcelId) },
-                { $set: { paymentStatus: 'paid', transactionId } }
+                { $set: { 
+                  paymentStatus: 'paid',
+                  deliveryStatus:"pending-pickup",
+                   transactionId 
+                  } }
             );
 
             // ✔ Save payment history once
@@ -393,7 +402,7 @@ app.get("/payment",verifyToken, async (req, res) => {
             }
         }
 
-        const cursor = paymentHistory.find(query).sort({ amount: -1, paidAt: -1 }) ;
+        const cursor = paymentHistory.find(query).sort({ amount: -1, paidAt: -1 }).limit(8) ;
         const result = await cursor.toArray();
 
         res.send(result);
