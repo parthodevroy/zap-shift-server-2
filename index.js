@@ -9,26 +9,23 @@ const admin = require("firebase-admin");
 
 const serviceAccount = require("./survicekey.json");
 
-// const admin = require("firebase-admin");
-
-// const serviceAccount = require("./survicekey.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware   8pi0F5rqKqKWPV1l
+// Middleware   
 app.use(cors());
 app.use(express.json());
 
-// firebase admin
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
 
 
+
+// middleware chekk the user valid and authentic user want to data 
 const verifyToken=async (req,res,next)=>{
   const token=req.headers.authorization
   if (!token) {
@@ -49,7 +46,6 @@ return res.status(401).send({ message: "Unauthorized access" });
  
 
 }
-
 
 // payment chekout part
 const stripe = require('stripe')(`${process.env.STRIPE_SECRET}`);
@@ -86,12 +82,55 @@ async function run() {
     const ParcelsCollection = db.collection("parcels"); 
     const paymentHistory=db.collection("payment")
     const riderCollection=db.collection("rider")
+
+    
+// midleware chek the user want this data he/she is a admin 
+const veryfyAdmin=async(req,res,next)=>{
+  const email=req.decoded_email
+  const query={email}
+  const user=await userCollection.findOne(query)
+  if (!user|| user.role!="admin") {
+    return res.status(403).send({message:"forbiden access"});
+
+    
+  }
+  next()
+}
+
     
     // Default route
     app.get("/", (req, res) => {
       res.send("zap-shift API running ");
     });
     // user related api
+
+    app.get("/user",async(req,res)=>{
+      const serceUser=req.query.serceUser
+      let query={}
+      // console.log(query);
+      
+      if (serceUser) {
+        query = {
+      $or: [
+        { displayName: { $regex: serceUser, $options: "i" } },
+        { email: { $regex: serceUser, $options: "i" } }
+      ]
+    };
+        
+      }
+      const cursor=userCollection.find(query).sort({createdAt:-1}).limit(4)
+      const result=await cursor.toArray()
+      res.send(result)
+    })
+    app.get("/user/:id", (req,res)=>{
+
+    })
+    app.get("/user/:email/role",verifyToken, async(req,res)=>{
+      const email=req.params.email
+      const query={ email}
+      const user=await userCollection.findOne(query)
+      res.send({role:user?.role || "user"})
+    })
     app.post("/user",async(req,res)=>{
       const users=req.body
       users.role="user";
@@ -104,6 +143,18 @@ async function run() {
       }
       const userData=await userCollection.insertOne(users)
       res.send(userData)
+    })
+    app.patch("/user/:id",verifyToken,veryfyAdmin,async (req,res)=>{
+      const id=req.params.id
+      const roleInfo=req.body
+      const query={_id:new ObjectId(id)}
+      const updateDocs={
+        $set:{
+          role:roleInfo.role
+        }
+      }
+      const result=await userCollection.updateOne(query,updateDocs)
+      res.send(result)
     })
 
     // rider collection relatead api (only admnin can see)
@@ -130,7 +181,7 @@ app.get("/rider", async (req, res) => {
   res.send(result);
 });
 //  rider 
-app.patch("/rider/:id",verifyToken, async (req, res) => {
+app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
    try {
     const status=req.body.status
      const id = req.params.id;
