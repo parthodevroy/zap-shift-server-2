@@ -171,10 +171,19 @@ const veryfyAdmin=async(req,res,next)=>{
     })
     // register rider get
 app.get("/rider", async (req, res) => {
+  const {status,district,workStatus}=req.query
   const query = {};
 
-  if (req.query.status) {
-    query.status = req.query.status;
+  if (status) {
+    query.status =status;
+  }
+  if (district) {
+    query.District=district
+    
+  }
+  if (workStatus) {
+    query.workStatus=workStatus
+    
   }
 
   const result = await riderCollection.find(query).toArray();
@@ -259,6 +268,31 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
      res.status(500).send({ message: "Failed to delete issue" });
    }
 
+  })
+  // parcel patchh when rider assign the product and on the way
+  app.patch("/parcels/:id",async(req,res)=>{
+    const {riderId, riderName,riderEmail}=req.body
+    const id=req.params.id
+    const query={_id:new ObjectId(id)}
+    const updateDocs={
+      $set:{
+        deliveryStatus:"rider_assign ",
+        riderId:riderId,
+        riderName:riderName,
+        riderEmail:riderEmail
+      }
+    }
+    const result=await ParcelsCollection.updateOne(query,updateDocs)
+    // and update the same api hit rider status
+    const riderQuery={_id:new ObjectId(riderId)}
+    const riderUpdatedDocs={
+      $set:{
+        workStatus:"in_delivery"
+
+      }
+    }
+    const riderResult=await riderCollection.updateOne(riderQuery,riderUpdatedDocs)
+    res.send(riderResult)
   })
 
   // delete  parcel
@@ -391,7 +425,7 @@ app.get("/payment",verifyToken, async (req, res) => {
     try {
         const email = req.query.email;
         const query = {};
-        console.log(req.headers);
+        // console.log(req.headers);
         
 
         if (email) {
