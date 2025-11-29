@@ -36,7 +36,7 @@ return res.status(401).send({ message: "Unauthorized access" });
       const tokenId = token.split(" ")[1];
     const decoded=await admin.auth().verifyIdToken(tokenId)
     req.decoded_email=decoded.email
-    console.log("inside of the token",decoded);
+    // console.log("inside of the token",decoded);
     
  next()
   }catch(err){
@@ -103,7 +103,7 @@ const veryfyAdmin=async(req,res,next)=>{
       res.send("zap-shift API running ");
     });
     // user related api
-
+// get all user my who is register my website 
     app.get("/user",async(req,res)=>{
       const serceUser=req.query.serceUser
       let query={}
@@ -122,15 +122,15 @@ const veryfyAdmin=async(req,res,next)=>{
       const result=await cursor.toArray()
       res.send(result)
     })
-    app.get("/user/:id", (req,res)=>{
-
-    })
+    
+    // get user base his role by this website 
     app.get("/user/:email/role",verifyToken, async(req,res)=>{
       const email=req.params.email
       const query={ email}
       const user=await userCollection.findOne(query)
       res.send({role:user?.role || "user"})
     })
+    // when user register zapshift page and save his database do simple user
     app.post("/user",async(req,res)=>{
       const users=req.body
       users.role="user";
@@ -144,6 +144,7 @@ const veryfyAdmin=async(req,res,next)=>{
       const userData=await userCollection.insertOne(users)
       res.send(userData)
     })
+    // patch /updated user role user to admin and admin to simple user
     app.patch("/user/:id",verifyToken,veryfyAdmin,async (req,res)=>{
       const id=req.params.id
       const roleInfo=req.body
@@ -159,7 +160,7 @@ const veryfyAdmin=async(req,res,next)=>{
 
     // rider collection relatead api (only admnin can see)
 
-    // rider register
+    // rider register/form filap zap shoft would like took part rider in zapshift
 
     app.post("/rider",async(req,res)=>{
       const rider=req.body
@@ -169,7 +170,8 @@ const veryfyAdmin=async(req,res,next)=>{
       const userData=await riderCollection.insertOne(rider)
       res.send(userData)
     })
-    // register rider get
+    // register people  get api those people
+    //  want feile like rider and the alredy registed and subn=mit rider frome
 app.get("/rider", async (req, res) => {
   const {status,district,workStatus}=req.query
   const query = {};
@@ -189,7 +191,7 @@ app.get("/rider", async (req, res) => {
   const result = await riderCollection.find(query).toArray();
   res.send(result);
 });
-//  rider 
+//  rider status updaated 
 app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
    try {
     const status=req.body.status
@@ -225,26 +227,34 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
     app.post("/parcels", async (req, res) => {
             const parcel = req.body;
             parcel.createdAt = new Date();
-            parcel.trackingId = generateTrackingId(); // ✅ এখানে জেনারেট হচ্ছে
+            parcel.trackingId = generateTrackingId(); 
             parcel.deliveryStatus = "pending";
             parcel.paymentStatus = "unpaid";
             const result = await ParcelsCollection.insertOne(parcel);
             res.send(result);
         });
-        // get parcel
+        // get which parcel those parcel people want to send another place  
     app.get("/parcels",async (req, res) => {
     try {
       
       const query ={}
-      const {email,deliveryStatus}=req.query;
+      const {email,deliveryStatus,riderEmail}=req.query;
       if (email) {
         query.EmailAddress=email
         
       }
-      if (deliveryStatus) {
-        query.deliveryStatus=deliveryStatus
+      if (riderEmail) {
+        query.riderEmail=riderEmail
         
       }
+      if (deliveryStatus!=='parcel_deliverd') {
+       
+        query.deliveryStatus={$nin:['parcel_deliverd']}
+        
+      }else{
+        query.deliveryStatus=deliveryStatus
+      }
+    
       const option={sort:{createdAt:-1}}
 
       const result = await ParcelsCollection.find(query,option).toArray();
@@ -254,6 +264,23 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
       res.status(500).send({ message: "Failed to fetch user issues" });
     }
   });
+  // get singal parcel and show only show rider page details
+
+  // app.get("/parcels/rider",async(req,res)=>{
+  //   const {riderEmail,deliveryStatus}=req.query
+  //   const query={}
+  //   if (riderEmail) {
+  //     query.riderEmail=riderEmail
+      
+  //   }
+  //   if (deliveryStatus) {
+  //   query.deliveryStatus=deliveryStatus.trim()
+      
+  //   }
+  //   const cursor=ParcelsCollection.find(query)
+  //   const result=await cursor.toArray()
+  //   res.send(result)
+  // })
 // get parcel by id
   app.get("/parcels/:id",async (req, res)=>{
 
@@ -269,14 +296,14 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
    }
 
   })
-  // parcel patchh when rider assign the product and on the way
+  // parcel patch when admin  assign the product and send request to rider  confirm
   app.patch("/parcels/:id",async(req,res)=>{
     const {riderId, riderName,riderEmail}=req.body
     const id=req.params.id
     const query={_id:new ObjectId(id)}
     const updateDocs={
       $set:{
-        deliveryStatus:"rider_assign ",
+        deliveryStatus:"rider_assign".trim(),
         riderId:riderId,
         riderName:riderName,
         riderEmail:riderEmail
@@ -294,7 +321,32 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
     const riderResult=await riderCollection.updateOne(riderQuery,riderUpdatedDocs)
     res.send(riderResult)
   })
+// again patch parcel when the rider confirm the order (accepeted/reject) 
+app.patch("/parcels/:id/status",async (req,res)=>{
+  const {deliveryStatus,riderId}=req.body
+  const id=req.params.id
+  const query={_id:new ObjectId(id)}
+const UpdatedDocs={
+  $set:{
+    deliveryStatus:deliveryStatus
+  }
+}
+if (deliveryStatus==='parcel_deliverd') {
+  // and update the same api hit rider status
+    const riderQuery={_id:new ObjectId(riderId)}
+    const riderUpdatedDocs={
+      $set:{
+        workStatus:"available"
 
+      }
+    }
+    const riderResult=await riderCollection.updateOne(riderQuery,riderUpdatedDocs)
+    res.send(riderResult)
+  
+}
+const result=await ParcelsCollection.updateOne(query,UpdatedDocs)
+res.send(result)
+})
   // delete  parcel
   app.delete("/parcels/:id",async (req, res) => {
    try {
@@ -321,7 +373,7 @@ app.post('/create-checkout-session', async (req, res) => {
   const session = await stripe.checkout.sessions.create({
     line_items: [
       {
-        // Provide the exact Price ID (for example, price_1234) of the product you want to sell
+       
        price_data:{
         unit_amount:amount,
         currency:"usd",
@@ -348,7 +400,7 @@ app.post('/create-checkout-session', async (req, res) => {
 });
 
 
-
+// payment veryfy and created session id 
 app.post('/payment/verify', async (req, res) => {
     const { sessionId } = req.body;
 
@@ -359,9 +411,8 @@ app.post('/payment/verify', async (req, res) => {
     try {
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-        const transactionId = session.payment_intent; // ⭐ Unified transaction ID
-
-        // 🔥 Prevent double save
+        const transactionId = session.payment_intent; 
+       
         const exists = await paymentHistory.findOne({ transactionId });
 
         if (exists) {
@@ -383,7 +434,7 @@ app.post('/payment/verify', async (req, res) => {
 
             const trackingId = currentParcel.trackingId;
 
-            // ✔ parcel update
+            // parcel update
             await ParcelsCollection.updateOne(
                 { _id: new ObjectId(parcelId) },
                 { $set: { 
@@ -393,7 +444,7 @@ app.post('/payment/verify', async (req, res) => {
                   } }
             );
 
-            // ✔ Save payment history once
+            //  Save payment history once
             await paymentHistory.insertOne({
                 amount: session.amount_total / 100,
                 currency: session.currency,
@@ -425,7 +476,8 @@ app.get("/payment",verifyToken, async (req, res) => {
     try {
         const email = req.query.email;
         const query = {};
-        // console.log(req.headers);
+        console.log(req.headers);
+        
         
 
         if (email) {
@@ -448,7 +500,6 @@ app.get("/payment",verifyToken, async (req, res) => {
 
 
 
-
   app.listen(port, () => {
       console.log(`Server running on port ${port}`);
     });
@@ -459,147 +510,3 @@ app.get("/payment",verifyToken, async (req, res) => {
 
 run().catch(console.dir);
     
-
-// issu details 
-
-
-// app.get("/issues/:id",verifyToken,async (req, res) => {
-//   try {
-//     const id = req.params.id;
-//     const issue = await issuesCollection.findOne({ _id: new ObjectId(id) });
-//     if (!issue) return res.status(404).send({ message: "Issue not found" });
-
-//     // console.log(" Issue fetched by:", req.user.email);
-//     res.send(issue);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).send({ message: "Server error" });
-//   }
-// });
-
-    
-// app.post("/userissues", verifyToken, async (req, res) => {
-//   try {
-//     const issue = req.body;
-
-   
-//     const userIssue = {
-//       ...issue,
-//       email: req.user.email,
-//       createdAt: new Date(),
-//       status: "ongoing",
-//     };
-
-    
-//     const userResult = await userIssuesCollection.insertOne(userIssue);
-
-   
-//     const publicIssue = {
-//       ...issue,
-//       createdAt: new Date(),
-//       status: "ongoing",
-//       userIssueId: userResult.insertedId, 
-//     };
-
-    
-//     const publicResult = await issuesCollection.insertOne(publicIssue);
-
-//     res.send({
-//       success: true,
-//       message: "Issue added successfully",
-//       userIssueId: userResult.insertedId,
-//       publicIssueId: publicResult.insertedId,
-//     });
-//   } catch (err) {
-//     console.error("Error adding issue:", err);
-//     res.status(500).send({ message: "Failed to add issue" });
-//   }
-// });
-
-//     //Get (My Issues)
-//     app.get("/userissues", verifyToken,async (req, res) => {
-//       try {
-//         const email = req.query.email;
-//         const query = email ? { email } : {};
-//         const result = await userIssuesCollection.find(query).toArray();
-//         res.send(result);
-//       } catch (err) {
-//         console.error(err);
-//         res.status(500).send({ message: "Failed to fetch user issues" });
-//       }
-//     });
-
-//     // Edit 
-//     app.put("/userissues/:id",verifyToken, async (req, res) => {
-//       try {
-//         const id = req.params.id;
-//         const updatedIssue = req.body;
-//         const result = await userIssuesCollection.updateOne(
-//           { _id: new ObjectId(id) },
-//           { $set: updatedIssue }
-//         );
-//         res.send(result);
-//       } catch (err) {
-//         console.error(err);
-//         res.status(500).send({ message: "Failed to update issue" });
-//       }
-//     });
-
-//     // Delete 
-//     app.delete("/userissues/:id",async (req, res) => {
-//       try {
-//         const id = req.params.id;
-//         const result = await userIssuesCollection.deleteOne({
-//           _id: new ObjectId(id),
-//         });
-//         res.send(result);
-//       } catch (err) {
-//         console.error(err);
-//         res.status(500).send({ message: "Failed to delete issue" });
-//       }
-//     });
-
-//     //  Contributes
-//     app.post("/contribute",verifyToken,async (req, res) => {
-//       const contribution = req.body;
-//       const result = await contributionsCollection.insertOne(contribution);
-//       res.send(result);
-//     });
-
-
-//     // all contributors information
-// app.get("/contributions/:issueId", verifyToken, async (req, res) => {
-//   try {
-//     const issueId = req.params.issueId;
-//     const result = await contributionsCollection.find({ issueId }).toArray();
-//     res.send(result);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).send({ message: "Failed to fetch contributions" });
-//   }
-// });
-
-
-//     app.get("/mycontributions/:email",verifyToken,async (req, res) => {
-//       const email = req.params.email;
-//       const result = await contributionsCollection.find({ userEmail: email }).toArray();
-//       res.send(result);
-//     });
-
-//     app.put("/mycontributions/:id",async (req, res) => {
-//       const id = req.params.id;
-//       const { amount } = req.body;
-//       const result = await contributionsCollection.updateOne(
-//         { _id: new ObjectId(id) },
-//         { $set: { amount } }
-//       );
-//       res.send(result);
-//     });
-
-//     app.delete("/mycontributions/:id",verifyToken,async (req, res) => {
-//       const id = req.params.id;
-//       const result = await contributionsCollection.deleteOne({ _id: new ObjectId(id) });
-//       res.send(result);
-//     });
-
-  
