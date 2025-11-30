@@ -82,6 +82,7 @@ async function run() {
     const ParcelsCollection = db.collection("parcels"); 
     const paymentHistory=db.collection("payment")
     const riderCollection=db.collection("rider")
+    const trakingCollection=db.collection("trakingId")
 
     
 // midleware chek the user want this data he/she is a admin 
@@ -96,7 +97,17 @@ const veryfyAdmin=async(req,res,next)=>{
   }
   next()
 }
+const TrakingLog=async(trackingId,status)=>{
+  const log={
+    trackingId,
+    status,
+    details:status.split('_').join(' '),
+    createdAt:new Date()
+  }
+  const result=await trakingCollection.insertOne(log)
+  return result
 
+}
     
     // Default route
     app.get("/", (req, res) => {
@@ -223,6 +234,22 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
    }
  });
 
+//  trakings id realated api 
+app.get("/tracking/:trackingId", async (req, res) => {
+    const trackingId = req.params.trackingId;
+
+    const query = { trackingId };
+
+    const result = await trakingCollection
+        .find(query)
+        .sort({ createdAt: -1 }) // latest first
+        .toArray();
+
+    res.send(result);
+});
+
+
+
 // post pacel
     app.post("/parcels", async (req, res) => {
             const parcel = req.body;
@@ -234,53 +261,61 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
             res.send(result);
         });
         // get which parcel those parcel people want to send another place  
-    app.get("/parcels",async (req, res) => {
-    try {
+  //   app.get("/parcels",async (req, res) => {
+  //   try {
       
-      const query ={}
-      const {email,deliveryStatus,riderEmail}=req.query;
-      if (email) {
-        query.EmailAddress=email
+  //     const query ={}
+  //     const {email,deliveryStatus,riderEmail}=req.query;
+  //     if (email) {
+  //       query.EmailAddress=email
         
-      }
-      if (riderEmail) {
-        query.riderEmail=riderEmail
+  //     }
+  //     if (riderEmail) {
+  //       query.riderEmail=riderEmail
         
-      }
-      if (deliveryStatus!=='parcel_deliverd') {
+  //     }
+  //     if (deliveryStatus!=='parcel_deliverd') {
        
-        query.deliveryStatus={$nin:['parcel_deliverd']}
+  //       query.deliveryStatus={$nin:['parcel_deliverd']}
         
-      }else{
-        query.deliveryStatus=deliveryStatus
-      }
+  //     }else{
+  //       query.deliveryStatus=deliveryStatus
+  //     }
     
-      const option={sort:{createdAt:-1}}
+  //     const option={sort:{createdAt:-1}}
 
-      const result = await ParcelsCollection.find(query,option).toArray();
-      res.send(result);
-    } catch (err) {
-      console.error(err);
-      res.status(500).send({ message: "Failed to fetch user issues" });
+  //     const result = await ParcelsCollection.find(query,option).toArray();
+  //     res.send(result);
+  //   } catch (err) {
+  //     console.error(err);
+  //     res.status(500).send({ message: "Failed to fetch user issues" });
+  //   }
+  // });
+  app.get("/parcels", async (req, res) => {
+  try {
+    const query = {};
+    const { email, deliveryStatus, riderEmail } = req.query;
+
+    if (email) query.EmailAddress = email; // sender email
+    if (riderEmail) query.riderEmail = riderEmail; // rider only assigned
+    if (deliveryStatus) {
+      if (deliveryStatus !== "parcel_deliverd") {
+        query.deliveryStatus = { $nin: ["parcel_deliverd"] };
+      } else {
+        query.deliveryStatus = deliveryStatus;
+      }
     }
-  });
-  // get singal parcel and show only show rider page details
 
-  // app.get("/parcels/rider",async(req,res)=>{
-  //   const {riderEmail,deliveryStatus}=req.query
-  //   const query={}
-  //   if (riderEmail) {
-  //     query.riderEmail=riderEmail
-      
-  //   }
-  //   if (deliveryStatus) {
-  //   query.deliveryStatus=deliveryStatus.trim()
-      
-  //   }
-  //   const cursor=ParcelsCollection.find(query)
-  //   const result=await cursor.toArray()
-  //   res.send(result)
-  // })
+    const options = { sort: { createdAt: -1 } };
+    const result = await ParcelsCollection.find(query, options).toArray();
+    res.send(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: "Failed to fetch parcels" });
+  }
+});
+
+ 
 // get parcel by id
   app.get("/parcels/:id",async (req, res)=>{
 
@@ -298,7 +333,7 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
   })
   // parcel patch when admin  assign the product and send request to rider  confirm
   app.patch("/parcels/:id",async(req,res)=>{
-    const {riderId, riderName,riderEmail}=req.body
+    const {riderId, riderName,riderEmail,trackingId}=req.body
     const id=req.params.id
     const query={_id:new ObjectId(id)}
     const updateDocs={
@@ -319,11 +354,12 @@ app.patch("/rider/:id",verifyToken,veryfyAdmin, async (req, res) => {
       }
     }
     const riderResult=await riderCollection.updateOne(riderQuery,riderUpdatedDocs)
+    TrakingLog(trackingId,'rider_assign')
     res.send(riderResult)
   })
 // again patch parcel when the rider confirm the order (accepeted/reject) 
 app.patch("/parcels/:id/status",async (req,res)=>{
-  const {deliveryStatus,riderId}=req.body
+  const {deliveryStatus,riderId,trackingId}=req.body
   const id=req.params.id
   const query={_id:new ObjectId(id)}
 const UpdatedDocs={
@@ -345,6 +381,7 @@ if (deliveryStatus==='parcel_deliverd') {
   
 }
 const result=await ParcelsCollection.updateOne(query,UpdatedDocs)
+TrakingLog(trackingId,deliveryStatus)
 res.send(result)
 })
   // delete  parcel
@@ -425,6 +462,7 @@ app.post('/payment/verify', async (req, res) => {
 
         if (session.payment_status === 'paid' && session.metadata?.parcelId) {
             const parcelId = session.metadata.parcelId;
+           
 
             const currentParcel = await ParcelsCollection.findOne({ _id: new ObjectId(parcelId) });
 
@@ -433,13 +471,14 @@ app.post('/payment/verify', async (req, res) => {
             }
 
             const trackingId = currentParcel.trackingId;
+             TrakingLog(trackingId,'parcel_paid')
 
             // parcel update
             await ParcelsCollection.updateOne(
                 { _id: new ObjectId(parcelId) },
                 { $set: { 
                   paymentStatus: 'paid',
-                  deliveryStatus:"pending-pickup",
+                  deliveryStatus:"parcel_paid",
                    transactionId 
                   } }
             );
