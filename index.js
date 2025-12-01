@@ -97,6 +97,18 @@ const veryfyAdmin=async(req,res,next)=>{
   }
   next()
 }
+// rider secure data use valid token then access
+const veryfyRider=async(req,res,next)=>{
+  const email=req.decoded_email
+  const query={email}
+  const user=await userCollection.findOne(query)
+  if (!user|| user.role!="rider") {
+    return res.status(403).send({message:"forbiden access"});
+
+    
+  }
+  next()
+}
 const TrakingLog=async(trackingId,status)=>{
   const log={
     trackingId,
@@ -250,16 +262,20 @@ app.get("/tracking/:trackingId", async (req, res) => {
 
 
 
-// post pacel
+// post pacel **note:jdi traking id realated kno problem hy tahole ai khane r payment api te hbe 
+// karon taking id genared double hye jete pare parcel created r parcel er payment hower por
     app.post("/parcels", async (req, res) => {
             const parcel = req.body;
+
             parcel.createdAt = new Date();
+
             parcel.trackingId = generateTrackingId(); 
             parcel.deliveryStatus = "pending";
             parcel.paymentStatus = "unpaid";
+          TrakingLog(parcel.trackingId,'parcel_created')
             const result = await ParcelsCollection.insertOne(parcel);
             res.send(result);
-        });
+        });   
         // get which parcel those parcel people want to send another place  
   //   app.get("/parcels",async (req, res) => {
   //   try {
@@ -291,6 +307,20 @@ app.get("/tracking/:trackingId", async (req, res) => {
   //     res.status(500).send({ message: "Failed to fetch user issues" });
   //   }
   // });
+
+  // aggrigate papeline (advance topic)
+  app.get("/parcels/delivery-status/status",async(req,res)=>{
+    const papeline=[
+      {
+        $group:{
+          _id:"$deliveryStatus",
+          count:{$sum:1}
+        }
+      }
+    ]
+    const result=await ParcelsCollection.aggregate(papeline).toArray();
+    res.send(result)
+  })
   app.get("/parcels", async (req, res) => {
   try {
     const query = {};
